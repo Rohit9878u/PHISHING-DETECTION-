@@ -32,6 +32,19 @@ def run_all_tests():
     assert_test("style.css" in html, "Home page references style.css")
     assert_test("script.js" in html, "Home page references script.js")
     assert_test("chart.umd.min.js" in html, "Home page references Chart.js CDN")
+    assert_test('id="dashboardHeroTitle"' in html, "Dashboard renders the threat intelligence hero")
+    assert_test('class="nav-item active" id="navDashboard"' in html
+                and 'class="pane-view active" id="paneDashboard"' in html,
+                "Dashboard is the default landing view")
+    assert_test('data-pane-shortcut="navUrlScanner"' in html
+                and 'data-pane-shortcut="navEmailScanner"' in html,
+                "Dashboard hero exposes URL and email scanner shortcuts")
+    core_js = client.get('/static/js/script.js')
+    assert_test(core_js.status_code == 200 and b'recordAnalyticsBatch' in core_js.data,
+                "Static route serves the core script from the flat project layout")
+    pulse_js = client.get('/static/js/security-pulse.js')
+    assert_test(pulse_js.status_code == 200 and b'SecurityPulse' in pulse_js.data,
+                "Static route serves the React Security Pulse widget")
 
     # --- TEST 2: POST / (Legacy Form Submission) ---
     res_form_safe = client.post('/', data={'url': 'https://google.com'})
@@ -87,6 +100,22 @@ def run_all_tests():
     # 3g: Empty input
     res = client.post('/scan-url', json={'url': ''})
     assert_test(res.status_code == 400, "AJAX /scan-url with empty URL returns 400")
+
+    # --- TEST 3h: POST /scan-email (local email phishing screening) ---
+    res_email_empty = client.post('/scan-email', json={'body': ''})
+    assert_test(res_email_empty.status_code == 400,
+                "POST /scan-email with empty message returns 400")
+
+    res_email_phish = client.post('/scan-email', json={
+        'body': 'Your account is suspended. Verify your password and OTP immediately at https://paypa1-login.xyz'
+    })
+    email_data = res_email_phish.get_json()
+    assert_test(res_email_phish.status_code == 200 and email_data.get('status') == 'success',
+                "POST /scan-email accepts a pasted email message")
+    assert_test(email_data.get('risk_score', 0) >= 35 and email_data.get('verdict') in {'suspicious', 'fake'},
+                "Suspicious message is flagged by email screening")
+    assert_test(email_data.get('analysis_method') in {'rules_only', 'dataset_model_and_rules'},
+                "Email scan reports which local analysis methods were used")
 
     # --- TEST 4: POST /scan-qr (QR Scanner) ---
     def make_qr_bytes(content, img_format='PNG'):
@@ -226,6 +255,24 @@ def run_all_tests():
     assert_test(len(ask_data.get('answer', '')) > 50, "POST /api/rag/ask generated comprehensive answer")
     assert_test(len(ask_data.get('citations', [])) > 0, "POST /api/rag/ask includes threat knowledge citations")
     assert_test(len(ask_data.get('suggested_questions', [])) > 0, "POST /api/rag/ask includes follow-up suggestions")
+
+    # 8d-1: Incident-response questions must retrieve the incident-response playbook
+    res_ir_clicked = client.post('/api/rag/ask', json={'message': 'I clicked a malicious link but did not enter credentials.'})
+    ir_clicked = res_ir_clicked.get_json()
+    assert_test(res_ir_clicked.status_code == 200, "POST /api/rag/ask handles malicious-link incidents")
+    assert_test(ir_clicked.get('status') == 'success', "Malicious-link incident response status is success")
+    assert_test(any(c.get('id') == 'ir-link-clicked' for c in ir_clicked.get('citations', [])),
+                "Malicious-link query retrieves the link-clicked incident playbook")
+
+    res_ir_credentials = client.post('/api/rag/ask', json={'message': 'I entered my password on a phishing website.'})
+    ir_credentials = res_ir_credentials.get_json()
+    assert_test(ir_credentials.get('citations', [{}])[0].get('id') == 'ir-credentials-submitted',
+                "Credential-submission query retrieves the credentials-submitted incident playbook")
+
+    res_takedown = client.post('/api/rag/ask', json={'message': 'How do I report and take down a phishing domain?'})
+    takedown = res_takedown.get_json()
+    assert_test(any(c.get('id') == 'takedown-procedure' for c in takedown.get('citations', [])),
+                "Takedown query retrieves the domain abuse reporting workflow")
 
     # 8e: POST /api/rag/ask validation (empty query)
     res_rag_empty = client.post('/api/rag/ask', json={'message': ''})

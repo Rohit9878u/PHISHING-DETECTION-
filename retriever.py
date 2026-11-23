@@ -90,6 +90,36 @@ class ThreatKnowledgeRetriever:
 
             # Keyword & tag boosting
             bonus = 0.0
+            doc_id = doc.get("id", "")
+            if doc_id == "ir-credentials-submitted" and any(
+                phrase in cleaned_query
+                for phrase in (
+                    "credentials submitted",
+                    "entered password",
+                    "entered my password",
+                    "submitted password",
+                    "login details",
+                    "password was entered",
+                )
+            ):
+                bonus += 0.75
+            elif doc_id == "ir-link-clicked" and any(
+                phrase in cleaned_query
+                for phrase in (
+                    "malicious link clicked",
+                    "clicked a link",
+                    "did not enter",
+                    "no credentials",
+                    "visited a phishing",
+                )
+            ):
+                bonus += 0.75
+            elif doc_id == "takedown-procedure" and any(
+                phrase in cleaned_query
+                for phrase in ("takedown", "abuse report", "report domain", "remove website")
+            ):
+                bonus += 0.75
+
             doc_tags = set(t.lower() for t in doc.get("tags", []))
             tag_overlap = len(query_tokens.intersection(doc_tags))
             bonus += tag_overlap * 0.12

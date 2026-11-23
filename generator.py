@@ -246,11 +246,12 @@ class ThreatForensicGenerator:
         # --- Local Grounded Threat Copilot Generator (Offline RAG) ---
         q_lower = query.lower()
         top_doc = retrieved_docs[0] if retrieved_docs else None
+        top_score = top_doc.get("score", 0.0) if top_doc else 0.0
 
         # Build grounded response based on top retrieved documents and user query intent
         response_parts = []
 
-        if top_doc:
+        if top_doc and top_score >= 0.12:
             mitre_str = f" (**{top_doc.get('mitre_id')}**)" if top_doc.get('mitre_id') else ""
             response_parts.append(
                 f"### 🛡️ Threat Intelligence Analysis: {top_doc.get('title')}{mitre_str}\n\n"

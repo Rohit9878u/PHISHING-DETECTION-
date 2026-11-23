@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel AI URL Scanner</title>
+    <link rel="stylesheet" href="popup.css">
+    <script defer src="popup.js"></script>
+</head>
+<body>
+    <main class="popup-shell">
+        <header class="brand-row">
+            <div class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <path d="M16 3 27 7v8c0 7.1-4.6 11.6-11 14-6.4-2.4-11-6.9-11-14V7l11-4Z" fill="url(#shieldGradient)" stroke="#D8CBFF" stroke-width="1.2"/>
+                    <path d="m11 16 3.2 3.2L21 12" stroke="#F8FAFC" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="shieldGradient" x1="5" y1="4" x2="27" y2="29" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#5287FF"/>
+                            <stop offset="1" stop-color="#7C3AED"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="brand-copy">
+                <div class="brand-name">Sentinel <span>AI</span></div>
+                <div class="brand-caption">WEB THREAT INTELLIGENCE</div>
+            </div>
+            <div class="api-indicator"><span></span> API TARGET</div>
+        </header>
+
+        <section class="intro">
+            <p class="eyebrow"><span class="eyebrow-line"></span> ACTIVE TAB INSPECTION</p>
+            <h1>Check the link.<br><span>Know the risk.</span></h1>
+            <p class="intro-copy">Screen a website with the Sentinel AI detection service before you trust it.</p>
+        </section>
+
+        <form id="scanForm" class="scan-form" novalidate>
+            <label for="urlInput">Website address</label>
+            <div class="url-input-wrap">
+                <svg class="url-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+                <input id="urlInput" name="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://example.com" aria-describedby="tabHint">
+                <button id="refreshTabButton" class="refresh-button" type="button" aria-label="Use current tab URL" title="Use current tab URL">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <path d="M20 7v5h-5"/>
+                        <path d="M4.9 9a7.5 7.5 0 0 1 12.4-2L20 12M4 17v-5h5"/>
+                        <path d="M19.1 15a7.5 7.5 0 0 1-12.4 2L4 12"/>
+                    </svg>
+                </button>
+            </div>
+            <p id="tabHint" class="input-hint">Current tab URL loaded. You can edit or paste another URL.</p>
+            <button id="scanButton" class="scan-button" type="submit">
+                <span class="scan-button-text">Scan URL</span>
+                <svg class="scan-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path d="M5 12h14"/>
+                    <path d="m12 5 7 7-7 7"/>
+                </svg>
+                <span class="scan-spinner" aria-hidden="true"></span>
+            </button>
+        </form>
+
+        <div id="scanningState" class="scanning-state" role="status" hidden>
+            <span class="scan-wave" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div>
+                <strong>Analyzing URL</strong>
+                <span>Waiting for Sentinel AI classification…</span>
+            </div>
+        </div>
+
+        <section id="resultPanel" class="result-panel" aria-live="polite" aria-atomic="true" hidden>
+            <div class="result-header">
+                <div class="result-shield" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </div>
+                <div class="result-title-group">
+                    <p id="resultLabel" class="result-label">RESULT</p>
+                    <h2 id="resultHeading">Scan result</h2>
+                </div>
+                <div id="confidenceBlock" class="confidence-block" hidden>
+                    <span>CONFIDENCE</span>
+                    <strong id="confidenceValue"></strong>
+                </div>
+            </div>
+            <p id="resultUrl" class="result-url"></p>
+            <div id="reasonCard" class="reason-card" hidden>
+                <span class="reason-label">BACKEND EXPLANATION</span>
+                <p id="reasonText"></p>
+            </div>
+        </section>
+
+        <footer class="popup-footer">
+            <span>Powered by your Sentinel AI backend</span>
+            <span class="backend-address">127.0.0.1:5002</span>
+        </footer>
+    </main>
+</body>
+</html>

@@ -7,6 +7,7 @@ import datetime
 import urllib.parse
 import numpy as np
 import cv2
+import joblib
 from flask import Flask, render_template, request, jsonify, send_from_directory
 
 # Enable running in flat folder structure without modifying directory layout
@@ -41,9 +42,11 @@ def serve_css(filename):
 @app.route('/static/js/<path:filename>')
 @app.route('/js/<path:filename>')
 def serve_js(filename):
-    if os.path.isdir('static/js'):
-        return send_from_directory('static/js', filename)
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), os.path.basename(filename))
+    _app_dir = os.path.dirname(os.path.abspath(__file__))
+    _static_js_dir = os.path.join(_app_dir, 'static', 'js')
+    if os.path.isfile(os.path.join(_static_js_dir, filename)):
+        return send_from_directory(_static_js_dir, filename)
+    return send_from_directory(_app_dir, os.path.basename(filename))
 
 # Maximum upload size: 8 Megabytes
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
@@ -680,6 +683,150 @@ def get_typosquats():
         "domain": domain,
         "count": len(variations),
         "results": variations
+    })
+
+# ==============================================================================
+# Email Phishing Screening Endpoint
+# ==============================================================================
+
+_email_classifier = None
+_email_classifier_mtime = None
+_email_classifier_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'email_classifier.joblib')
+
+def get_email_classifier():
+    """Load the locally trained email model and refresh it when retrained."""
+    global _email_classifier, _email_classifier_mtime
+    try:
+        model_mtime = os.stat(_email_classifier_path).st_mtime_ns
+    except FileNotFoundError:
+        _email_classifier = None
+        _email_classifier_mtime = None
+        return None
+
+    if model_mtime != _email_classifier_mtime:
+        _email_classifier = joblib.load(_email_classifier_path)
+        if not hasattr(_email_classifier, 'predict_proba') or 1 not in list(_email_classifier.classes_):
+            raise ValueError("The email classifier must support predict_proba and use label 1 for phishing.")
+        _email_classifier_mtime = model_mtime
+    return _email_classifier
+
+@app.route('/scan-email', methods=['POST'])
+def scan_email():
+    """Screen an email with the local dataset-trained model and threat heuristics."""
+    data = request.get_json(silent=True) if request.is_json else request.form.to_dict()
+    sender = str(data.get('sender', '')).strip()
+    subject = str(data.get('subject', '')).strip()
+    body = str(data.get('body', '')).strip()
+
+    if not sender and not subject and not body:
+        return jsonify({
+            "status": "error",
+            "message": "Please provide a sender, subject, or email message."
+        }), 400
+
+    text = f"{subject}\n{body}".lower()
+    findings = []
+    score = 0
+
+    sender_match = re.match(r'^(?:[^@\s]+<)?([^@\s<>]+)@([^>\s]+)>?$', sender.strip())
+    sender_domain = sender_match.group(2).lower().strip('.') if sender_match else ''
+    suspicious_tlds = ('.xyz', '.top', '.work', '.click', '.fit', '.loan', '.cam', '.info')
+
+    if sender_match:
+        for brand_key, brand_info in POPULAR_BRANDS.items():
+            threat = check_brand_threat(f"{sender_domain}")
+            if threat and threat.get('brand') == brand_info['display']:
+                score += 45
+                findings.append(threat['reason'])
+                break
+
+        if sender_domain.count('.') == 0:
+            score += 20
+            findings.append("Sender domain does not contain a valid top-level domain.")
+
+        if sender_domain.endswith(suspicious_tlds):
+            score += 15
+            findings.append("Sender uses a commonly abused or low-trust top-level domain.")
+
+        for brand_key in POPULAR_BRANDS:
+            if brand_key in sender_domain and not _is_legitimate_domain(sender_domain, brand_key):
+                score += 35
+                findings.append(f"Sender domain appears to impersonate the {brand_key.title()} brand.")
+                break
+    elif sender:
+        score += 10
+        findings.append("Sender address format could not be verified.")
+
+    urgency_phrases = (
+        'urgent', 'immediately', 'act now', 'account suspended', 'account blocked',
+        'verify your account', 'password expires', 'reset your password',
+        'confirm your identity', 'unusual login', 'payment failed', 'click here',
+        'within 24 hours', '24 hours', 'limited time'
+    )
+    matched_phrases = [phrase for phrase in urgency_phrases if phrase in text]
+    if matched_phrases:
+        score += min(35, 12 + len(matched_phrases) * 5)
+        findings.append("Message uses urgency or account-security pressure language.")
+
+    credential_phrases = (
+        'password', 'social security', 'credit card', 'bank account',
+        'login', 'credentials', 'otp', 'one-time code', 'invoice'
+    )
+    matched_credentials = [phrase for phrase in credential_phrases if phrase in text]
+    if matched_credentials:
+        score += min(25, len(matched_credentials) * 6)
+        findings.append("Message requests sensitive information or financial/credential details.")
+
+    link_pattern = re.compile(r'https?://([^\s<>"\')]+)', re.IGNORECASE)
+    links = link_pattern.findall(body)
+    for link in links:
+        link = link.lower().rstrip('.,;:')
+        link_domain = link.split('/')[0].split(':')[0]
+        threat = check_brand_threat(link_domain)
+        if threat:
+            score += 35
+            findings.append(f"Link domain looks suspicious: {threat['reason']}")
+        if link_domain.endswith(suspicious_tlds):
+            score += 15
+            findings.append("Email contains a link on a commonly abused top-level domain.")
+
+    email_classifier = get_email_classifier()
+    model_probability = None
+    if email_classifier is not None:
+        model_classes = list(email_classifier.classes_)
+        phishing_index = model_classes.index(1)
+        model_probability = round(float(email_classifier.predict_proba([text])[0][phishing_index]) * 100, 2)
+        score = max(score, model_probability)
+        if model_probability >= 35:
+            findings.append(f"The email-text classifier estimates a {model_probability:.1f}% phishing likelihood.")
+
+    score = min(score, 100)
+    if score >= 70:
+        verdict = 'fake'
+        label = 'FAKE / PHISHING EMAIL'
+    elif score >= 35:
+        verdict = 'suspicious'
+        label = 'SUSPICIOUS EMAIL'
+    else:
+        verdict = 'real'
+        label = 'LIKELY REAL'
+
+    return jsonify({
+        "status": "success",
+        "scan_type": "email",
+        "sender": sender,
+        "sender_domain": sender_domain,
+        "subject": subject,
+        "verdict": verdict,
+        "label": label,
+        "is_phishing": verdict == 'fake',
+        "risk_score": score,
+        "confidence": score,
+        "model_probability": model_probability,
+        "analysis_method": "dataset_model_and_rules" if email_classifier is not None else "rules_only",
+        "findings": list(dict.fromkeys(findings)),
+        "timestamp": datetime.datetime.now().strftime("%b %d, %Y, %I:%M %p"),
+        "disclaimer": "This local screening result is not proof of authenticity and does not verify SPF, DKIM, or DMARC."
     })
 
 # ==============================================================================

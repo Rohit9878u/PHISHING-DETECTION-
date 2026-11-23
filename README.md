@@ -138,7 +138,7 @@ Sentinel-AI-Phishing-Detector/
 ├── phishing_mnb.pkl                    # Alternative Multinomial Naive Bayes model
 ├── vectorizer.pkl                      # Pre-trained CountVectorizer feature extractor
 ├── requirements.txt                    # Production Python dependencies
-├── test_app.py                         # 71-test comprehensive validation test suite
+├── test_app.py                         # Comprehensive backend validation test suite
 ├── Phishing Website detection system.ipynb # Original research, training & benchmarking notebook
 │
 ├── templates/
@@ -148,7 +148,8 @@ Sentinel-AI-Phishing-Detector/
 │   ├── css/
 │   │   └── style.css                   # SaaS Light & Dark themes, smooth transitions & responsive layout
 │   ├── js/
-│   │   └── script.js                   # Client-side state, AJAX scanner, Chart.js & CSV/JSON export
+│   │   ├── script.js                   # Client-side state, AJAX scanner, Chart.js & CSV/JSON export
+│   │   └── security-pulse.js           # React-powered, live-updating dashboard widget
 │   └── images/                         # Visual assets and icons
 │
 └── Dataset/
@@ -188,7 +189,19 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Run the Application
+### 4. Train the Email Phishing Classifier
+
+Extract the Kaggle dataset and train from its aggregate `phishing_email.csv` file:
+
+```bash
+python train_email_classifier.py "../archive (1)"
+```
+
+The aggregate file contains `text_combined` email text and labels (`0` = legitimate, `1` = phishing). Training reports held-out metrics and saves `email_classifier.joblib` locally; that generated model is ignored by Git. The scanner loads it automatically. If it is not present, the existing threat-rule checks remain available.
+
+The dataset is [Phishing Email Dataset on Kaggle](https://www.kaggle.com/datasets/naserabdullahalam/phishing-email-dataset), licensed CC BY-SA 4.0. Attribute the dataset to Naser Abdullah Alam and cite Al-Subaiey et al., [“Novel Interpretable and Robust Web-based AI Platform for Phishing Email Detection”](https://arxiv.org/abs/2405.11619). Follow the dataset license if redistributing the dataset or a model trained from it.
+
+### 5. Run the Application
 ```bash
 python app.py
 ```

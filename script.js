@@ -7,22 +7,21 @@
     'use strict';
 
     // Immediate Theme Pre-Application (Prevents flashing)
+    document.documentElement.setAttribute('data-theme', 'light');
     try {
         const storedTheme = localStorage.getItem('sentinel_theme');
-        if (storedTheme) {
+        if (storedTheme === 'light' || storedTheme === 'dark') {
             document.documentElement.setAttribute('data-theme', storedTheme);
-        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.setAttribute('data-theme', 'dark');
-        } else {
-            document.documentElement.setAttribute('data-theme', 'light');
         }
     } catch (e) {}
 
     // --- State ---
+    const analyticsStorageKey = 'sentinel_scan_analytics_v1';
     let currentTyposquats = [];
     let currentDomain = 'linkedin.com';
     let chartInstance = null;
     let selectedQrFile = null;
+    let scanAnalytics = loadScanAnalytics();
 
     // --- DOM Elements ---
     const sidebar = document.getElementById('sidebar');
@@ -76,6 +75,9 @@
     const removeQrBtn = document.getElementById('removeQrBtn');
     const scanQrBtn = document.getElementById('scanQrBtn');
     const qrResultContainer = document.getElementById('qrResultContainer');
+    const emailScanForm = document.getElementById('emailScanForm');
+    const emailBodyInput = document.getElementById('emailBodyInput');
+    const emailResultContainer = document.getElementById('emailResultContainer');
 
     // Analytics
     const statTotalScans = document.getElementById('statTotalScans');
@@ -93,7 +95,9 @@
         initTyposquatMonitor();
         initUrlScanner();
         initQrScanner();
+        initEmailScanner();
         initAnalyticsChart();
+        updateAnalytics();
         initThreatCopilot();
 
     });
@@ -129,6 +133,13 @@
                     sidebar.classList.remove('open');
                     if (sidebarBackdrop) sidebarBackdrop.classList.remove('show');
                 }
+            });
+        });
+
+        document.querySelectorAll('[data-pane-shortcut]').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetNav = document.getElementById(button.getAttribute('data-pane-shortcut'));
+                if (targetNav) targetNav.click();
             });
         });
 
@@ -296,11 +307,23 @@
         }
 
         try {
-            const response = await fetch(`/api/typosquats?domain=${encodeURIComponent(currentDomain)}`);
-            const data = await response.json();
+            const [verdictResponse, typosquatResponse] = await Promise.all([
+                fetch('/scan-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: currentDomain })
+                }),
+                fetch(`/api/typosquats?domain=${encodeURIComponent(currentDomain)}`)
+            ]);
+            const verdictData = await verdictResponse.json();
+            const data = await typosquatResponse.json();
+            renderDomainVerdict(currentDomain, verdictData);
 
             if (data.status === 'success' && data.results) {
                 currentTyposquats = data.results;
+                recordAnalyticsBatch(data.results.map(row => ({
+                    isThreat: row.verdict === 'Phishing' || row.risk >= 4
+                })));
                 renderTyposquatTable(data.results);
                 if (typosquatCountDisplay) {
                     typosquatCountDisplay.textContent = `${data.results.length} Typosquats Discovered`;
@@ -312,6 +335,35 @@
                 typosquatCountDisplay.textContent = 'Failed to load typosquats.';
             }
         }
+    }
+
+    function renderDomainVerdict(domain, data) {
+        const verdictContainer = document.getElementById('domainVerdict');
+        if (!verdictContainer) return;
+
+        if (data.status === 'error') {
+            verdictContainer.className = 'domain-verdict verdict-neutral';
+            verdictContainer.innerHTML = `
+                <span class="domain-verdict-dot"></span>
+                <strong>Check Failed</strong>
+                <span>${escapeHtml(data.message || 'Enter a valid domain')}</span>
+            `;
+            return;
+        }
+
+        const isPhishing = data.is_phishing || data.verdict === 'phishing';
+        const label = isPhishing ? 'FAKE / PHISHING' : 'REAL / SAFE';
+        const confidence = typeof data.confidence === 'number'
+            ? `${Math.round(data.confidence)}%`
+            : '';
+
+        verdictContainer.className = `domain-verdict ${isPhishing ? 'verdict-fake' : 'verdict-real'}`;
+        verdictContainer.innerHTML = `
+            <span class="domain-verdict-dot"></span>
+            <strong>${label}</strong>
+            <span>${escapeHtml(domain)}</span>
+            ${confidence ? `<span class="domain-confidence">${confidence} confidence</span>` : ''}
+        `;
     }
 
     function renderTyposquatTable(rows) {
@@ -514,6 +566,68 @@
     }
 
     // =========================================================================
+    // Email Phishing Scanner
+    // =========================================================================
+    function initEmailScanner() {
+        if (!emailScanForm) return;
+
+        emailScanForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const body = emailBodyInput ? emailBodyInput.value.trim() : '';
+
+            if (!body) {
+                emailResultContainer.innerHTML = '<div class="email-verdict email-suspicious">Please paste an email message to check.</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/scan-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ body })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Email scan failed.');
+                renderEmailResult(data);
+            } catch (err) {
+                emailResultContainer.innerHTML = `<div class="email-verdict email-suspicious">${escapeHtml(err.message)}</div>`;
+            }
+        });
+    }
+
+    function renderEmailResult(data) {
+        if (!emailResultContainer) return;
+
+        const isFake = data.verdict !== 'real';
+        const verdictClass = isFake ? 'email-fake' : 'email-real';
+        const verdictMessage = data.verdict === 'fake'
+            ? 'This email is fake'
+            : (data.verdict === 'suspicious' ? 'This email may be fake' : 'This email is not flagged as fake');
+        const findings = data.findings && data.findings.length
+            ? data.findings.map(finding => `<li>${escapeHtml(finding)}</li>`).join('')
+            : '<li>No strong phishing indicators were detected.</li>';
+
+        emailResultContainer.innerHTML = `
+            <div class="email-verdict ${verdictClass}">
+                <span class="domain-verdict-dot"></span>
+                <strong>${verdictMessage}</strong>
+                <span>${escapeHtml(String(data.risk_score ?? ''))} / 100 risk score</span>
+            </div>
+            <div class="email-findings">
+                <p class="email-analysis-method">
+                    Analysis: ${data.analysis_method === 'dataset_model_and_rules'
+                        ? 'dataset-trained model and threat rules'
+                        : 'threat rules only (train the dataset model for ML screening)'}
+                </p>
+                <h4>Screening findings</h4>
+                <ul>${findings}</ul>
+                <p class="email-disclaimer">${escapeHtml(data.disclaimer)}</p>
+            </div>
+        `;
+    }
+
+    // =========================================================================
     // Standalone QR Scanner
     // =========================================================================
     function initQrScanner() {
@@ -572,6 +686,9 @@
     function renderStandaloneResult(data, container) {
         if (!container) return;
         const isPhishing = data.is_phishing || data.verdict === 'phishing';
+        if (data.status === 'success') {
+            recordAnalyticsBatch([{ isThreat: isPhishing }]);
+        }
         const cardClass = isPhishing ? 'verdict-phish-bg' : 'verdict-safe-bg';
         const textColor = isPhishing ? '#DC2626' : '#16A34A';
         const targetUrl = data.url || data.extracted_url || '';
@@ -680,10 +797,10 @@
 
             // Update Chart.js colors dynamically
             if (chartInstance) {
-                chartInstance.data.datasets[0].borderColor = isDark ? '#131B2A' : '#FFFFFF';
-                if (chartInstance.options && chartInstance.options.plugins && chartInstance.options.plugins.legend) {
-                    chartInstance.options.plugins.legend.labels = chartInstance.options.plugins.legend.labels || {};
-                    chartInstance.options.plugins.legend.labels.color = isDark ? '#F1F5F9' : '#1E293B';
+                chartInstance.data.datasets[0].borderColor = isDark ? '#111019' : '#FFFCF9';
+                const legendLabels = chartInstance.options.plugins?.legend?.labels;
+                if (legendLabels) {
+                    legendLabels.color = isDark ? '#F1F5F9' : '#2A2029';
                 }
                 chartInstance.update();
             }
@@ -731,6 +848,45 @@
     // =========================================================================
     // Analytics
     // =========================================================================
+    function loadScanAnalytics() {
+        const emptyAnalytics = { total: 0, safe: 0, threats: 0 };
+        try {
+            const stored = JSON.parse(localStorage.getItem(analyticsStorageKey) || 'null');
+            if (!stored || typeof stored !== 'object') return emptyAnalytics;
+            return {
+                total: Number.isSafeInteger(stored.total) && stored.total >= 0 ? stored.total : 0,
+                safe: Number.isSafeInteger(stored.safe) && stored.safe >= 0 ? stored.safe : 0,
+                threats: Number.isSafeInteger(stored.threats) && stored.threats >= 0 ? stored.threats : 0
+            };
+        } catch (err) {
+            console.error('Unable to load saved scan analytics:', err);
+            return emptyAnalytics;
+        }
+    }
+
+    function recordAnalyticsBatch(scans) {
+        if (!Array.isArray(scans) || scans.length === 0) return;
+
+        scans.forEach(scan => {
+            scanAnalytics.total += 1;
+            if (scan.isThreat) {
+                scanAnalytics.threats += 1;
+            } else {
+                scanAnalytics.safe += 1;
+            }
+        });
+
+        try {
+            localStorage.setItem(analyticsStorageKey, JSON.stringify(scanAnalytics));
+        } catch (err) {
+            console.error('Unable to save scan analytics:', err);
+        }
+        window.dispatchEvent(new CustomEvent('sentinel:analytics-updated', {
+            detail: { ...scanAnalytics }
+        }));
+        updateAnalytics();
+    }
+
     function initAnalyticsChart() {
         if (!chartCanvas) return;
         const ctx = chartCanvas.getContext('2d');
@@ -741,7 +897,7 @@
             data: {
                 labels: ['Safe Websites', 'Phishing & Typosquats'],
                 datasets: [{
-                    data: [1, 1],
+                    data: [scanAnalytics.safe, scanAnalytics.threats],
                     backgroundColor: ['#16A34A', '#DC2626'],
                     borderWidth: 2,
                     borderColor: isDark ? '#131B2A' : '#FFFFFF'
@@ -765,16 +921,12 @@
     }
 
     function updateAnalytics() {
-        const total = currentTyposquats.length;
-        let threatCount = currentTyposquats.filter(t => t.verdict === 'Phishing' || t.risk >= 4).length;
-        let safeCount = total - threatCount;
-
-        if (statTotalScans) statTotalScans.textContent = total;
-        if (statSafeScans) statSafeScans.textContent = safeCount;
-        if (statThreatScans) statThreatScans.textContent = threatCount;
+        if (statTotalScans) statTotalScans.textContent = scanAnalytics.total;
+        if (statSafeScans) statSafeScans.textContent = scanAnalytics.safe;
+        if (statThreatScans) statThreatScans.textContent = scanAnalytics.threats;
 
         if (chartInstance) {
-            chartInstance.data.datasets[0].data = [safeCount, threatCount];
+            chartInstance.data.datasets[0].data = [scanAnalytics.safe, scanAnalytics.threats];
             chartInstance.update();
         }
     }

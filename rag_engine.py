@@ -52,7 +52,32 @@ class SentinelRAGEngine:
         if conversation_history is None:
             conversation_history = []
 
-        retrieved_docs = self.retriever.search(query, top_k=top_k)
+        query_lower = query.lower()
+        category = None
+        expanded_query = query
+
+        if any(term in query_lower for term in (
+            "submitted", "entered credentials", "entered password", "entered my password",
+            "stole credentials", "password was entered", "password on", "login details"
+        )) or ("credentials" in query_lower and any(term in query_lower for term in ("after", "submitted", "entered"))):
+            category = "incident_response"
+            expanded_query = f"{query} credentials submitted phishing site incident response password reset tokens"
+        elif any(term in query_lower for term in (
+            "clicked", "visited", "opened", "malicious link", "no credentials", "did not enter"
+        )) and not any(term in query_lower for term in ("fix", "takedown", "block", "remove")):
+            category = "incident_response"
+            expanded_query = f"{query} malicious link clicked no credentials entered incident response"
+        elif any(term in query_lower for term in (
+            "takedown", "report domain", "abuse report", "block domain", "remove website",
+            "fix a phishing", "fix phishing", "phishing website"
+        )) and "fix" not in query_lower:
+            category = "incident_response"
+            expanded_query = f"{query} domain abuse reporting threat takedown workflow"
+        elif any(term in query_lower for term in ("takedown", "report", "abuse")):
+            category = "incident_response"
+            expanded_query = f"{query} domain abuse reporting threat takedown workflow"
+
+        retrieved_docs = self.retriever.search(expanded_query, top_k=top_k, category=category)
         response = self.generator.generate_chat_response(
             query=query,
             conversation_history=conversation_history,

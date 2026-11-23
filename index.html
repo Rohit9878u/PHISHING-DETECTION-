@@ -37,7 +37,7 @@
 
                 <!-- Navigation Links -->
                 <nav class="sidebar-nav">
-                    <button type="button" class="nav-item" id="navDashboard" data-pane="paneDashboard">
+                    <button type="button" class="nav-item active" id="navDashboard" data-pane="paneDashboard">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect width="7" height="9" x="3" y="3" rx="1"/>
                             <rect width="7" height="5" x="14" y="3" rx="1"/>
@@ -47,7 +47,7 @@
                         <span>Dashboard</span>
                     </button>
 
-                    <button type="button" class="nav-item active" id="navTyposquat" data-pane="paneTyposquat">
+                    <button type="button" class="nav-item" id="navTyposquat" data-pane="paneTyposquat">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                         </svg>
@@ -70,6 +70,14 @@
                             <path d="M21 16h-3a2 2 0 0 0-2 2v3"/>
                         </svg>
                         <span>QR Scanner</span>
+                    </button>
+
+                    <button type="button" class="nav-item" id="navEmailScanner" data-pane="paneEmailScanner">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="20" height="16" x="2" y="4" rx="2"/>
+                            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                        </svg>
+                        <span>Email Scanner</span>
                     </button>
 
                     <button type="button" class="nav-item" id="navThreatCopilot" data-pane="paneThreatCopilot">
@@ -117,7 +125,7 @@
             <!-- ==============================================================
                  PANE 1: TYPOSQUAT VIEW (Sentinel-AI Dashboard)
                  ============================================================== -->
-            <div class="pane-view active" id="paneTyposquat">
+            <div class="pane-view" id="paneTyposquat">
                 <!-- Top Header & Breadcrumb -->
                 <div class="main-top-bar">
                     <div class="view-title-group">
@@ -181,6 +189,7 @@
                             Enter your brand domain to see up to 300 typosquats
                         </div>
                     </form>
+                    <div id="domainVerdict" class="domain-verdict" aria-live="polite"></div>
 
                     <p class="monitor-limit-notice">
                         You have 1 daily limit for domain monitoring on the free plan, if you want to make any changes to the current domain you need to export the list before proceeding to enter a new domain
@@ -429,6 +438,41 @@
             </div>
 
             <!-- ==============================================================
+                 PANE 3: EMAIL SCANNER
+                 ============================================================== -->
+            <div class="pane-view" id="paneEmailScanner">
+                <div class="main-top-bar">
+                    <div class="view-title-group">
+                        <button type="button" class="mobile-menu-btn" aria-label="Toggle Navigation">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                        <h2 class="view-title">Email Phishing Scanner</h2>
+                    </div>
+                    <div class="top-bar-actions">
+                        <button type="button" class="theme-toggle-btn top-bar-theme-btn" title="Toggle Light / Dark Mode" aria-label="Toggle Theme">
+                            <span class="theme-label-text">Light / Dark</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="scan-date-meta">Paste an email message to screen it for phishing indicators</div>
+
+                <div class="standalone-scanner-card email-scanner-card">
+                    <form id="emailScanForm">
+                        <div class="email-field">
+                            <label for="emailBodyInput">Email message</label>
+                            <textarea id="emailBodyInput" class="email-textarea" placeholder="Paste the email message here..." rows="9"></textarea>
+                        </div>
+                        <button type="submit" class="btn-generate btn-scan-lg" id="scanEmailBtn">Check Email</button>
+                    </form>
+                    <div id="emailResultContainer" class="email-result-container" aria-live="polite"></div>
+                </div>
+            </div>
+
+            <!-- ==============================================================
                  PANE 3: QR SCANNER (Visual Matrix Decoding)
                  ============================================================== -->
             <div class="pane-view" id="paneQrScanner">
@@ -497,7 +541,7 @@
             <!-- ==============================================================
                  PANE 4: DASHBOARD & ANALYTICS
                  ============================================================== -->
-            <div class="pane-view" id="paneDashboard">
+            <div class="pane-view active" id="paneDashboard">
                 <div class="main-top-bar">
                     <div class="view-title-group">
                         <button type="button" class="mobile-menu-btn" aria-label="Toggle Navigation">
@@ -533,6 +577,37 @@
                 </div>
                 <div class="scan-date-meta">Global &amp; Session Threat Intelligence Overview</div>
 
+                <section class="threat-hero" aria-labelledby="dashboardHeroTitle">
+                    <div class="threat-hero-copy">
+                        <p class="threat-hero-kicker"><span class="threat-hero-live-dot"></span> SECURITY OPERATIONS / SENTINEL-AI</p>
+                        <h3 id="dashboardHeroTitle">See the signal.<br><span>Stop the threat.</span></h3>
+                        <p class="threat-hero-description">
+                            Check suspicious links and email messages before they reach you.
+                        </p>
+                        <div class="threat-hero-actions">
+                            <button type="button" class="threat-hero-primary" data-pane-shortcut="navUrlScanner">
+                                Scan a URL
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                                </svg>
+                            </button>
+                            <button type="button" class="threat-hero-secondary" data-pane-shortcut="navEmailScanner">
+                                Inspect an email
+                            </button>
+                        </div>
+                        <p class="threat-hero-footnote">URL · QR CODE · EMAIL THREAT ANALYSIS</p>
+                    </div>
+                    <div class="threat-hero-visual" aria-hidden="true">
+                        <div class="threat-hero-orb">
+                            <span class="threat-hero-orb-core"></span>
+                            <span class="threat-hero-node threat-hero-node-one"></span>
+                            <span class="threat-hero-node threat-hero-node-two"></span>
+                            <span class="threat-hero-node threat-hero-node-three"></span>
+                        </div>
+                        <span class="threat-hero-coordinate">SIGNAL / 01</span>
+                    </div>
+                </section>
+
                 <!-- 3 Stat Cards Grid -->
                 <div class="stat-cards-grid">
                     <div class="monitor-card stat-card-item">
@@ -548,6 +623,8 @@
                         <div class="stat-card-val val-threat" id="statThreatScans">0</div>
                     </div>
                 </div>
+
+                <div id="securityPulseRoot"></div>
 
                 <!-- Doughnut Chart Box -->
                 <div class="monitor-card chart-card-box">
@@ -722,6 +799,11 @@
             </div>
         </div>
     </div>
+
+    <!-- React-powered Security Pulse widget -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="{{ url_for('static', filename='js/security-pulse.js') }}"></script>
 
     <!-- Core Application JavaScript -->
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
