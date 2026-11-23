@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🛡️ Sentinel-AI | Next-Gen Phishing & Threat Intelligence Platform
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -516,3 +517,6 @@ TEST RESULTS: 71 / 71 TESTS PASSED (100.0%)
 ## ⚠️ Disclaimer
 
 This system is developed for **defensive, educational, and cybersecurity research purposes** to empower users, researchers, and security teams in detecting deceptive URLs, malicious QR codes, and brand impersonation attacks.
+=======
+# PHISHING-DETECTION-
+>>>>>>> 92dd30ef9e38632d3ca37518666985d52e044209
