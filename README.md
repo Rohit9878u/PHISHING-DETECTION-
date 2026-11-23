@@ -520,3 +520,5 @@ This system is developed for **defensive, educational, and cybersecurity researc
 =======
 # PHISHING-DETECTION-
 >>>>>>> 92dd30ef9e38632d3ca37518666985d52e044209
+>>>>>>>
+>>>>>>> link -> https://phishing-detection-cyan-ten.vercel.app/
